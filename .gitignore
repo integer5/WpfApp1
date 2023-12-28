@@ -361,3 +361,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/WpfApp1/Database1.mdf
+/WpfApp1/Database1_log.ldf
