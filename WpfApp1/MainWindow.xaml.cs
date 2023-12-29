@@ -10,19 +10,31 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Data.SqlClient;
 using System.Data;
+using System.Text.Json;
+using System.IO;
 
 namespace WpfApp1
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
+    public class Item
+    {
+        public string MessageID { get; set; }
+        public string GeneratedDate {  get; set; }
+    }
+
     public partial class MainWindow : Window
     {
+        string jsonURI = "C:\\Users\\roman.luciak\\Downloads\\zdrojovy_dokument\\zdrojovy_dokument.json";
         string connectionString = "Data Source=(LocalDB)\\MSSQLLocalDB;AttachDbFilename=\"D:\\04 Práca doma\\CODIUM\\WPFApp\\WpfApp1\\WpfApp1\\Database1.mdf\";Integrated Security=True";
         SqlConnection connection;
         
         public MainWindow()
         {
+            FileStream stream = File.OpenRead(jsonURI);
+
+            var result = JsonSerializer.Deserialize<List<Item>>(stream);
+
+            stream.Close();
+
             InitializeComponent();
         }
 
