@@ -15,10 +15,27 @@ using System.IO;
 
 namespace WpfApp1
 {
-    public class Item
+    public class TiposMessage
     {
         public string MessageID { get; set; }
         public string GeneratedDate {  get; set; }
+        public TiposEvent Event { get; set; }
+    }
+
+    public class TiposEvent
+    {
+        public int ProviderEventID { get; set; }
+        public string EventName { get; set; }
+        public DateTime EventDate { get; set; }
+        public IList<TiposOdd> OddsList { get; set;}
+    }
+
+    public class TiposOdd
+    {
+        public int ProviderOddsID { get; set; }
+        public string OddsName { get; set; }
+        public float OddsRate { get; set; }
+        public string Status { get; set; }
     }
 
     public partial class MainWindow : Window
@@ -31,7 +48,7 @@ namespace WpfApp1
         {
             FileStream stream = File.OpenRead(jsonURI);
 
-            var result = JsonSerializer.Deserialize<List<Item>>(stream);
+            var result = JsonSerializer.Deserialize<List<TiposMessage>>(stream);
 
             stream.Close();
 
