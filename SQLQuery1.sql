@@ -10,3 +10,5 @@ ELSE
 
 
 SELECT * FROM Events
+
+TRUNCATE TABLE TestTable
