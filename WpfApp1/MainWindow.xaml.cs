@@ -20,7 +20,7 @@ namespace WpfApp1
     {
         string jsonURI = "C:\\Users\\roman.luciak\\Downloads\\zdrojovy_dokument\\zdrojovy_dokument.json";
         string connectionString = "Data Source=(LocalDB)\\MSSQLLocalDB;AttachDbFilename=\"D:\\04 Práca doma\\CODIUM\\WPFApp\\WpfApp1\\WpfApp1\\Database1.mdf\";Integrated Security=True";
-        SqlConnection connection;
+        //SqlConnection Connection;
         Queue<TiposMessage> TiposMessages;
         
         public MainWindow()
@@ -35,7 +35,7 @@ namespace WpfApp1
 
             readTiposFile();
 
-            // Duration before {00:00:38.1429501}
+            // Duration before {00:00:26.4640061}
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
@@ -47,7 +47,7 @@ namespace WpfApp1
             object queueLock = new object();
 
             // Počet vláken
-            int threadCount = 4; // Změňte podle potřeby
+            int threadCount = 64; // Změňte podle potřeby
 
             // Pole pro uchování spuštěných vláken
             Thread[] threads = new Thread[threadCount];
@@ -67,8 +67,8 @@ namespace WpfApp1
                                 break; // Pokud je fronta prázdná, ukončíme vlákno
 
                             tiposMessage = TiposMessages.Dequeue();
+                            InsertTiposMessage(tiposMessage);
                         }
-                        InsertTiposMessage(tiposMessage);
                     }
                 });
 
@@ -82,23 +82,34 @@ namespace WpfApp1
                 thread.Join();
             }
 
-
             stopwatch.Stop();
             var duration = stopwatch.Elapsed;
         }
 
         void InsertTiposMessage(TiposMessage tiposMessage)
         {
-            InsertMessage(tiposMessage.MessageID, tiposMessage.GeneratedDate, tiposMessage.Event.ProviderEventID);
-            InsertEvent(tiposMessage.Event.ProviderEventID, tiposMessage.Event.EventName, tiposMessage.Event.EventDate.ToString("s"));
-
-            foreach (var odd in tiposMessage.Event.OddsList)
+            SqlConnection connection;
+            using (connection = new SqlConnection(connectionString))
             {
-                InsertOdd(tiposMessage.Event.ProviderEventID, odd.ProviderOddsID, odd.OddsName, odd.OddsRate, odd.Status);
+                //Connection.Open();
+                if (connection.State == ConnectionState.Closed) 
+                {
+                    connection.Open();
+                }
+
+                InsertMessage(connection, tiposMessage.MessageID, tiposMessage.GeneratedDate, tiposMessage.Event.ProviderEventID);
+                InsertEvent(connection, tiposMessage.Event.ProviderEventID, tiposMessage.Event.EventName, tiposMessage.Event.EventDate.ToString("s"));
+
+                foreach (var odd in tiposMessage.Event.OddsList)
+                {
+                    InsertOdd(connection,tiposMessage.Event.ProviderEventID, odd.ProviderOddsID, odd.OddsName, odd.OddsRate, odd.Status);
+                }
+
+                connection.Close();
             }
         }
 
-        void InsertOdd(int ProviderEventID, int ProviderOddsID, string OddsName, float OddsRate, string Status)
+        void InsertOdd(SqlConnection connection, int ProviderEventID, int ProviderOddsID, string OddsName, float OddsRate, string Status)
         {
             // ProviderEventID ; ProviderOddsID ; OddsName ; OddsRate ; Status
             // 1499420517 ; 764331995 ; Home ; 1.981 ; suspended
@@ -114,23 +125,18 @@ namespace WpfApp1
                 "ELSE " +
                 "INSERT INTO Odds VALUES (@ProviderEventID, @ProviderOddsID, @OddsName, @OddsRate, @Status)";
 
-            using (connection = new SqlConnection(connectionString))
+            using (SqlCommand command = new SqlCommand(query, connection))
             {
-                connection.Open();
-                using (SqlCommand command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
-                    command.Parameters.AddWithValue("@ProviderOddsID", ProviderOddsID);
-                    command.Parameters.AddWithValue("@OddsName", OddsName);
-                    command.Parameters.AddWithValue("@OddsRate", OddsRate);
-                    command.Parameters.AddWithValue("@Status", Status);
-                    command.ExecuteNonQuery();
-                }
-                connection.Close();
+                command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
+                command.Parameters.AddWithValue("@ProviderOddsID", ProviderOddsID);
+                command.Parameters.AddWithValue("@OddsName", OddsName);
+                command.Parameters.AddWithValue("@OddsRate", OddsRate);
+                command.Parameters.AddWithValue("@Status", Status);
+                command.ExecuteNonQuery();
             }
         }
 
-        void InsertEvent(int ProviderEventID, string EventName, string EventDate)
+        void InsertEvent(SqlConnection connection, int ProviderEventID, string EventName, string EventDate)
         {
             // ProviderEventID ; EventName ; EventDate
             // 120324104 ; Team B vs. Team D ; 2022-10-19T02:30:00
@@ -144,21 +150,16 @@ namespace WpfApp1
                 "ELSE " +
                 "INSERT INTO Events VALUES (@ProviderEventID, @EventName, @EventDate)";
 
-            using (connection = new SqlConnection(connectionString))
+            using (SqlCommand command = new SqlCommand(query, connection))
             {
-                connection.Open();
-                using (SqlCommand command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
-                    command.Parameters.AddWithValue("@EventName", EventName);
-                    command.Parameters.AddWithValue("@EventDate", EventDate);
-                    command.ExecuteNonQuery();
-                }
-                connection.Close();
+                command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
+                command.Parameters.AddWithValue("@EventName", EventName);
+                command.Parameters.AddWithValue("@EventDate", EventDate);
+                command.ExecuteNonQuery();
             }
         }
 
-        void InsertMessage(string MessageID, string GeneratedDate, int ProviderEventID)
+        void InsertMessage(SqlConnection connection, string MessageID, string GeneratedDate, int ProviderEventID)
         {
             // MessageID ; GeneratedDate ; ProviderEventID
             // b72340cf-edb1-47ee-b479-6558fbbf7455 ; 2022-10-10T12:44:44.9314727+02:00 ; 120324104
@@ -170,21 +171,16 @@ namespace WpfApp1
 
             string query =
                 "IF EXISTS (SELECT ProviderEventID FROM Messages WHERE ProviderEventID = @ProviderEventID) " +
-                "UPDATE Messages SET MessageID = @MessageID, GeneratedDate = @GeneratedDate WHERE ProviderEventID = @ProviderEventID " +
+                "UPDATE Messages SET GeneratedDate = @GeneratedDate WHERE ProviderEventID = @ProviderEventID " +
                 "ELSE " +
                 "INSERT INTO Messages VALUES (@MessageID, @GeneratedDate, @ProviderEventID)";
 
-            using (connection = new SqlConnection(connectionString))
+            using (SqlCommand command = new SqlCommand(query, connection))
             {
-                connection.Open();
-
-                using (SqlCommand command = new SqlCommand(query, connection))
-                {
-                    command.Parameters.AddWithValue("@MessageID", MessageID);
-                    command.Parameters.AddWithValue("@GeneratedDate", GeneratedDate);
-                    command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
-                    command.ExecuteNonQuery();
-                }
+                command.Parameters.AddWithValue("@MessageID", MessageID);
+                command.Parameters.AddWithValue("@GeneratedDate", GeneratedDate);
+                command.Parameters.AddWithValue("@ProviderEventID", ProviderEventID);
+                command.ExecuteNonQuery();
             }
         }
 
@@ -202,6 +198,7 @@ namespace WpfApp1
 
         void clearAllTables()
         {
+            SqlConnection connection;
             using (connection = new SqlConnection(connectionString))
             {
                 connection.Open();
