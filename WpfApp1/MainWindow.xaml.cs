@@ -13,19 +13,24 @@ using System.Data;
 using System.Text.Json;
 using System.IO;
 using System.Diagnostics;
+using System.ComponentModel;
 
 namespace WpfApp1
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler PropertyChanged;
         string jsonURI = "C:\\Users\\roman.luciak\\Downloads\\zdrojovy_dokument\\zdrojovy_dokument.json";
         string connectionString = "Data Source=(LocalDB)\\MSSQLLocalDB;AttachDbFilename=\"D:\\04 Práca doma\\CODIUM\\WPFApp\\WpfApp1\\WpfApp1\\Database1.mdf\";Integrated Security=True";
         //SqlConnection Connection;
         Queue<TiposMessage> TiposMessages;
-        
+        float StartCount;
+        Stopwatch StopwatchPocess;
+
         public MainWindow()
         {
 
+            this.DataContext = this;
             InitializeComponent();
         }
 
@@ -34,27 +39,33 @@ namespace WpfApp1
             clearAllTables();
 
             readTiposFile();
-
             // Duration before {00:00:26.4640061}
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
 
             //foreach (TiposMessage tiposMessage in TiposMessages)
             //{
             //    InsertTiposMessage(tiposMessage);
             //}
 
+            StopwatchPocess = new Stopwatch();
+            Task.Run(() => durationTimer());
+            Task.Run(() => ParallelProcess());
+
+
+        }
+
+        void ParallelProcess()
+        {
+            StopwatchPocess.Start();
+
             object queueLock = new object();
 
-            // Počet vláken
-            int threadCount = 64; // Změňte podle potřeby
+            int threadCount = 4;
 
-            // Pole pro uchování spuštěných vláken
             Thread[] threads = new Thread[threadCount];
+
 
             for (int i = 0; i < threadCount; i++)
             {
-                // Vytvoření vlákna
                 threads[i] = new Thread(() =>
                 {
                     while (true)
@@ -62,9 +73,10 @@ namespace WpfApp1
                         TiposMessage tiposMessage;
                         lock (queueLock)
                         {
-                            // Získání hodnoty z fronty (zamykání fronty pro synchronizaci)
                             if (TiposMessages.Count == 0)
-                                break; // Pokud je fronta prázdná, ukončíme vlákno
+                            {
+                                break;
+                            }
 
                             tiposMessage = TiposMessages.Dequeue();
                             InsertTiposMessage(tiposMessage);
@@ -72,18 +84,16 @@ namespace WpfApp1
                     }
                 });
 
-                // Spuštění vlákna
                 threads[i].Start();
             }
 
-            // Čekání na dokončení všech vláken
             foreach (Thread thread in threads)
             {
                 thread.Join();
             }
 
-            stopwatch.Stop();
-            var duration = stopwatch.Elapsed;
+            StopwatchPocess.Stop();
+
         }
 
         void InsertTiposMessage(TiposMessage tiposMessage)
@@ -107,6 +117,8 @@ namespace WpfApp1
 
                 connection.Close();
             }
+
+            ProgressValue = (StartCount - TiposMessages.Count) / StartCount * 100;
         }
 
         void InsertOdd(SqlConnection connection, int ProviderEventID, int ProviderOddsID, string OddsName, float OddsRate, string Status)
@@ -170,9 +182,6 @@ namespace WpfApp1
             //string query = "INSERT INTO Messages VALUES (@MessageID, @GeneratedDate, @ProviderEventID)";
 
             string query =
-                "IF EXISTS (SELECT ProviderEventID FROM Messages WHERE ProviderEventID = @ProviderEventID) " +
-                "UPDATE Messages SET GeneratedDate = @GeneratedDate WHERE ProviderEventID = @ProviderEventID " +
-                "ELSE " +
                 "INSERT INTO Messages VALUES (@MessageID, @GeneratedDate, @ProviderEventID)";
 
             using (SqlCommand command = new SqlCommand(query, connection))
@@ -194,6 +203,7 @@ namespace WpfApp1
             stream.Close();
 
             TiposMessages = new Queue<TiposMessage>(_TiposMessages);
+            StartCount = TiposMessages.Count;
         }
 
         void clearAllTables()
@@ -221,15 +231,40 @@ namespace WpfApp1
                     command.ExecuteNonQuery();
                 }
 
-                query = "TRUNCATE TABLE TestTable";
-                using (SqlCommand command = new SqlCommand(query, connection))
-                {
-                    command.ExecuteNonQuery();
-                }
-
                 connection.Close();
             }
         }
 
+
+        async void durationTimer()
+        {
+            while(TiposMessages.Count != 0)
+            {
+                DurationValue = StopwatchPocess.ToString();
+                await Task.Delay(25);
+            }
+        }
+
+        private float progressValue;
+        public float ProgressValue
+        {
+            get { return progressValue; }
+            set
+            {
+                progressValue = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("ProgressValue"));
+            }
+        }
+
+        private string durationValue;
+        public string DurationValue
+        {
+            get { return durationValue; }
+            set
+            {
+                durationValue = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("DurationValue"));
+            }
+        }
     }
 }
